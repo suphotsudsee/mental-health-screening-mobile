@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "jsx": "react-native",
+    "strict": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@screens/*": [
+        "screens/*"
+      ],
+      "@components/*": [
+        "components/*"
+      ],
+      "@services/*": [
+        "services/*"
+      ],
+      "@logic/*": [
+        "logic/*"
+      ],
+      "@store/*": [
+        "store/*"
+      ],
+      "@navigation/*": [
+        "navigation/*"
+      ],
+      "@theme/*": [
+        "theme/*"
+      ],
+      "@i18n/*": [
+        "i18n/*"
+      ],
+      "@i18n": [
+        "i18n/index"
+      ]
+    }
+  },
+  "include": [
+    "src"
+  ],
+  "extends": "expo/tsconfig.base"
+}

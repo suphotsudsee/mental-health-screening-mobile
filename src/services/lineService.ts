@@ -9,7 +9,7 @@ export async function sendLineNotifyIfNeeded(record: ScreeningRecord) {
   if (record.risk_level === "medium" || record.risk_level === "high") {
     const name = record.fullname || "(ไม่ระบุชื่อ)";
     const msg =
-      `แจ้งเตือนคัดกรองสุขภาพจิต\n` +
+      `แจ้งเตือนคัดกรองสุขภาพจิต (ส่งเข้ากลุ่ม LINE)\n` +
       `ชื่อ: ${name}\n` +
       `คะแนนเครียด: ${record.stress_score ?? "-"}\n` +
       `8Q รวม: ${record.q8_total}\n` +
@@ -17,7 +17,7 @@ export async function sendLineNotifyIfNeeded(record: ScreeningRecord) {
       `ข้อแนะนำ: ${record.recommendation}`;
 
     await api.post(
-      "/api/line-notify",
+      "/api/line-alert",   // <<< เปลี่ยนมาใช้ route ใหม่
       { text: msg },
       { headers: { "Content-Type": "application/json" } }
     );

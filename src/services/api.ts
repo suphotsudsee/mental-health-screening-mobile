@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || "http://localhost:9104";
+const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || "http://localhost:9103";
 
 export const api = axios.create({
   baseURL: BASE_URL,

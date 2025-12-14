@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model line_events {
+  id           BigInt   @id @default(autoincrement())
+  event_type   String
+  user_id      String?  @db.VarChar(64)
+  reply_token  String?  @db.VarChar(255)
+  message_type String?  @db.VarChar(50)
+  message_text String?  @db.Text
+  raw_json     Json
+  created_at   DateTime @default(now())
+
+  @@index([user_id])
+  @@index([created_at])
+}

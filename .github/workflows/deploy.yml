@@ -12,27 +12,27 @@ jobs:
     steps:
       - name: Go to project folder
         run: |
-          cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+          cd /home/phoubon-mhs-mobile/htdocs/mental-health-screening-mobile
           pwd
           ls
 
       - name: Git pull latest code
         run: |
-          cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+          cd /home/phoubon-mhs-mobile/htdocs/mental-health-screening-mobile
           git pull origin main
 
       - name: Install dependencies
         run: |
-          cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+          cd /home/phoubon-mhs-mobile/htdocs/mental-health-screening-mobile
           npm install
 
       - name: Build Next.js
         run: |
-          cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+          cd /home/phoubon-mhs-mobile/htdocs/mental-health-screening-mobile
           npm run build
 
       - name: Restart app with PM2 (no duplicate)
-        working-directory: /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+        working-directory: /home/phoubon-mhs-mobile/htdocs/mental-health-screening-mobile
         run: |
           if pm2 describe mhs-mobile-nextjs > /dev/null 2>&1; then
             echo "PM2 process exists -> restart"

@@ -26,10 +26,10 @@ jobs:
           cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
           npm install
 
-      - name: Build Next.js
-        run: |
-          cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
-          CI=false npm start
+      # - name: Build Next.js
+      #   run: |
+      #     cd /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th
+      #     CI=false npm start
 
       # - name: Restart app with PM2 (no duplicate)
       #   working-directory: /home/phoubon-mhs-mobile/htdocs/mhs-mobile.phoubon.in.th

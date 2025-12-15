@@ -20,11 +20,11 @@ async function replyMessage(replyToken: string, text: string) {
 
 export async function POST(req: Request) {
 
- console.log("✅ Webhook HIT:", new Date().toISOString());
+// console.log("✅ Webhook HIT:", new Date().toISOString());
 
   const rawBody = await req.text();
 
-console.log("RAW:", rawBody.slice(0, 300));
+//console.log("RAW:", rawBody.slice(0, 300));
   
   const signature = req.headers.get("x-line-signature");
 
@@ -39,6 +39,18 @@ console.log("RAW:", rawBody.slice(0, 300));
   }
 
   const body = JSON.parse(rawBody);
+
+//add by toei
+  const events = Array.isArray(body?.events) ? body.events : [];
+  console.log("events length:", events.length);
+
+  for (const ev of events) {
+    console.log("event type:", ev.type);
+    console.log("source:", ev.source);
+    console.log("groupId:", ev.source?.groupId ?? "no group");
+    console.log("userId:", ev.source?.userId ?? "no user");
+  }
+//end by toei
 
   for (const ev of body.events) {
     await prisma.line_events.create({

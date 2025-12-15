@@ -18,6 +18,11 @@ async function replyMessage(replyToken: string, text: string) {
   });
 }
 
+// Health check handler so a stray GET to this endpoint does not return 405.
+export async function GET() {
+  return NextResponse.json({ status: "ok", method: "GET" });
+}
+
 export async function POST(req: Request) {
 
 // console.log("✅ Webhook HIT:", new Date().toISOString());

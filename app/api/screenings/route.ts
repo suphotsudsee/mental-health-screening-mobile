@@ -13,6 +13,7 @@ type ScreeningPayload = {
 
 const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const DEFAULT_LINE_TARGET = process.env.LINE_GROUP_ID;
+const BANGKOK_TZ = "Asia/Bangkok";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,12 @@ function buildSummaryMessage(params: {
   recordId: bigint;
   createdAt: Date;
 }) {
+  const bangkokTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: BANGKOK_TZ,
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(params.createdAt);
+
   const lines = [
     "New screening completed",
     `Record ID: ${params.recordId}`,
@@ -50,7 +57,7 @@ function buildSummaryMessage(params: {
         : "not taken"
     }`,
     `Suicide risk flag: ${params.hasSuicideRisk ? "yes" : "no"}`,
-    `Recorded at: ${params.createdAt.toISOString()}`,
+    `Recorded at: ${bangkokTime} (UTC+7, Asia/Bangkok)`,
   ];
 
   return lines.join("\n");
@@ -223,6 +230,11 @@ export async function POST(req: NextRequest) {
     const responseData = {
       ...record,
       id: record.id.toString(),
+      createdAtBangkok: new Intl.DateTimeFormat("en-GB", {
+        timeZone: BANGKOK_TZ,
+        dateStyle: "short",
+        timeStyle: "medium",
+      }).format(record.created_at),
     };
 
     return NextResponse.json({

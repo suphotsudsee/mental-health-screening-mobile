@@ -56,14 +56,25 @@ function buildSummaryMessage(params: {
   return lines.join("\n");
 }
 
-async function pushLine(text: string, targetId?: string) {
+type LinePushResult = {
+  target: string;
+  success: boolean;
+  skipped: boolean;
+  reason?: string;
+};
+
+async function pushLine(text: string, targetId: string) {
   if (!LINE_TOKEN) {
-    return { success: false, skipped: true, reason: "LINE_CHANNEL_ACCESS_TOKEN is not set" };
+    return {
+      target: targetId,
+      success: false,
+      skipped: true,
+      reason: "LINE_CHANNEL_ACCESS_TOKEN is not set",
+    };
   }
 
-  const recipient = targetId || DEFAULT_LINE_TARGET;
-  if (!recipient) {
-    return { success: false, skipped: true, reason: "LINE_GROUP_ID is not set" };
+  if (!targetId) {
+    return { target: targetId, success: false, skipped: true, reason: "Missing LINE target ID" };
   }
 
   try {
@@ -74,24 +85,65 @@ async function pushLine(text: string, targetId?: string) {
         Authorization: `Bearer ${LINE_TOKEN}`,
       },
       body: JSON.stringify({
-        to: recipient,
+        to: targetId,
         messages: [{ type: "text", text }],
       }),
     });
 
     if (!res.ok) {
       const textBody = await res.text();
-      return { success: false, skipped: false, reason: textBody || `HTTP ${res.status}` };
+      return { target: targetId, success: false, skipped: false, reason: textBody || `HTTP ${res.status}` };
     }
 
-    return { success: true, skipped: false };
+    return { target: targetId, success: true, skipped: false };
   } catch (err) {
     return {
+      target: targetId,
       success: false,
       skipped: false,
       reason: err instanceof Error ? err.message : "Unknown LINE push error",
     };
   }
+}
+
+async function pushLineToTargets(text: string, userId?: string | null, groupId?: string | null) {
+  if (!LINE_TOKEN) {
+    return {
+      results: [] as LinePushResult[],
+      anySuccess: false,
+      allSkipped: true,
+      reason: "LINE_CHANNEL_ACCESS_TOKEN is not set",
+    };
+  }
+
+  const targets = Array.from(
+    new Set(
+      [userId, groupId ?? DEFAULT_LINE_TARGET].filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0
+      )
+    )
+  );
+
+  if (targets.length === 0) {
+    return {
+      results: [] as LinePushResult[],
+      anySuccess: false,
+      allSkipped: true,
+      reason: "No LINE target configured",
+    };
+  }
+
+  const results: LinePushResult[] = [];
+  for (const target of targets) {
+    results.push(await pushLine(text, target));
+  }
+
+  return {
+    results,
+    anySuccess: results.some((r) => r.success),
+    allSkipped: results.every((r) => r.skipped),
+    reason: results.find((r) => r.reason)?.reason,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -106,6 +158,7 @@ export async function POST(req: NextRequest) {
     const twoQ1 = toBoolean(twoQ?.q1);
     const twoQ2 = toBoolean(twoQ?.q2);
     const twoQRisk = twoQ1 || twoQ2;
+    const resolvedGroupId = body.lineGroupId || DEFAULT_LINE_TARGET || null;
 
     if (stressLevel === null || !twoQ) {
       return NextResponse.json({ error: "Missing required screening data" }, { status: 400 });
@@ -121,7 +174,7 @@ export async function POST(req: NextRequest) {
         nine_q_level: nineQLevel,
         suicide_risk: hasSuicideRisk,
         line_user_id: body.lineUserId ?? null,
-        line_group_id: body.lineGroupId ?? null,
+        line_group_id: resolvedGroupId,
       },
     });
 
@@ -137,7 +190,7 @@ export async function POST(req: NextRequest) {
       createdAt: record.created_at,
     });
 
-    const lineResult = await pushLine(summary, body.lineGroupId ?? undefined);
+    const lineResults = await pushLineToTargets(summary, body.lineUserId, resolvedGroupId);
 
     const responseData = {
       ...record,
@@ -147,9 +200,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: responseData,
-      lineNotified: lineResult.success,
-      lineSkipped: lineResult.skipped,
-      lineReason: lineResult.reason ?? null,
+      lineNotified: lineResults.anySuccess,
+      lineSkipped: lineResults.allSkipped,
+      lineReason: lineResults.reason ?? null,
+      lineTargets: lineResults.results,
     });
   } catch (err) {
     console.error("[screenings] Failed to process screening payload", err);

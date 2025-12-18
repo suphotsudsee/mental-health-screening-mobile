@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
   ArrowRight,
-  Check,
   RefreshCw,
   AlertTriangle,
   Heart,
@@ -14,8 +13,6 @@ import {
   Battery,
   UserX,
   AlertOctagon,
-  ShieldCheck,
-  Phone,
   Info,
   ChevronLeft,
   CloudRain,
@@ -23,13 +20,25 @@ import {
   CheckCircle2,
   HeartCrack,
   BatteryWarning,
-  RotateCcw,
 } from "lucide-react";
 
+type StressGaugeProps = {
+  onNext: (level: number) => void;
+};
+
+type TwoQPlusProps = {
+  onNext: () => void;
+  onHome: () => void;
+};
+
+type NineQProps = {
+  onHome: () => void;
+};
+
 // --- 1. COMPONENT: STRESS GAUGE (CANVAS) ---
-const StressGauge = ({ onNext }) => {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
+const StressGauge = ({ onNext }: StressGaugeProps) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [level, setLevel] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [angle, setAngle] = useState(-Math.PI); // Start at Left (-PI)
@@ -42,12 +51,13 @@ const StressGauge = ({ onNext }) => {
     { id: 5, label: "เครียดรุนแรง", desc: "ควบคุมยาก", color: "#ef4444", emoji: "😫" },
   ];
 
-  const getEmoji = (lvl) => (lvl === 0 ? "🤔" : levels[lvl - 1].emoji);
+  const getEmoji = (lvl: number) => (lvl === 0 ? "🤔" : levels[lvl - 1].emoji);
 
-  const drawGauge = (currentAngle) => {
+  const drawGauge = (currentAngle: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
     const width = canvas.width / dpr; // use CSS pixel size for drawing
     const height = canvas.height / dpr;
@@ -79,7 +89,7 @@ const StressGauge = ({ onNext }) => {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const mid = start + segmentAngle / 2;
-      ctx.fillText(i + 1, cx + Math.cos(mid) * radius, cy + Math.sin(mid) * radius);
+      ctx.fillText(String(i + 1), cx + Math.cos(mid) * radius, cy + Math.sin(mid) * radius);
     }
 
     // Needle
@@ -105,18 +115,23 @@ const StressGauge = ({ onNext }) => {
     ctx.fillText(getEmoji(level), cx, cy + 5);
   };
 
-  const handleInteract = (e) => {
+  const handleInteract = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const cx = rect.width / 2;
     const cy = rect.height * 0.85;
 
-    let clientX = e.clientX;
-    let clientY = e.clientY;
-    if (e.touches && e.touches.length > 0) {
+    let clientX: number;
+    let clientY: number;
+
+    if ("touches" in e && e.touches.length > 0) {
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
+    } else {
+      const mouseEvent = e as React.MouseEvent<HTMLDivElement>;
+      clientX = mouseEvent.clientX;
+      clientY = mouseEvent.clientY;
     }
 
     const x = clientX - rect.left;
@@ -225,7 +240,7 @@ const StressGauge = ({ onNext }) => {
 };
 
 // --- 2. COMPONENT: 2Q PLUS ---
-const TwoQPlus = ({ onNext, onHome }) => {
+const TwoQPlus = ({ onNext, onHome }: TwoQPlusProps) => {
   const [step, setStep] = useState(1);
   const [answers, setAnswers] = useState({ q1: null, q2: null });
 
@@ -234,7 +249,7 @@ const TwoQPlus = ({ onNext, onHome }) => {
     { id: 2, key: "q2", title: "เบื่อ ทำอะไรก็ไม่เพลิดเพลิน?", icon: <HeartCrack size={64} className="text-rose-400" />, theme: "bg-rose-50" },
   ];
 
-  const handleAnswer = (val) => {
+  const handleAnswer = (val: boolean) => {
     const key = questions[step - 1].key;
     const newAnswers = { ...answers, [key]: val };
     setAnswers(newAnswers);
@@ -316,7 +331,7 @@ const TwoQPlus = ({ onNext, onHome }) => {
 };
 
 // --- 3. COMPONENT: 9Q ---
-const NineQ = ({ onHome }) => {
+const NineQ = ({ onHome }: NineQProps) => {
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(0);
   const [hasSuicideRisk, setHasSuicideRisk] = useState(false);
@@ -333,7 +348,7 @@ const NineQ = ({ onHome }) => {
     { text: "คิดทำร้ายตนเอง", icon: <AlertOctagon className="text-red-600" /> },
   ];
 
-  const handleAnswer = (val) => {
+  const handleAnswer = (val: number) => {
     setScore((s) => s + val);
     if (step === 9 && val > 0) setHasSuicideRisk(true); // Check Q9 logic
 
@@ -416,7 +431,7 @@ export default function MentalHealthApp() {
   const goTo9Q = () => setView("9q");
 
   // Logic: Gauge -> 2Q (if high stress) or Stay
-  const handleGaugeNext = (level) => {
+  const handleGaugeNext = (level: number) => {
     // ถ้าเครียดน้อย (1-2) อาจจะจบเลยก็ได้ แต่ในที่นี้ถ้าอยากคัดกรองละเอียด
     // เราอาจจะให้ไป 2Q ถ้า Level >= 3
     if (level >= 3) {

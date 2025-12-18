@@ -57,6 +57,8 @@ type AssessmentPayload = {
   nineQScore: number | null;
   nineQSeverity: string | null;
   hasSuicideRisk: boolean;
+  lineUserId?: string | null;
+  lineGroupId?: string | null;
 };
 
 type SubmissionState = "idle" | "saving" | "error" | "success";
@@ -509,6 +511,8 @@ export default function MentalHealthApp() {
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
   const [fromLineMiniApp, setFromLineMiniApp] = useState(false);
   const [showLineWelcome, setShowLineWelcome] = useState(false);
+  const [lineUserId, setLineUserId] = useState<string | null>(null);
+  const [lineGroupId, setLineGroupId] = useState<string | null>(null);
   const lineInitRef = useRef(false);
 
   const goTo2Q = () => setView("2q");
@@ -551,7 +555,14 @@ export default function MentalHealthApp() {
             return;
           }
           const profile = await liff.getProfile();
-          if (!cancelled) setWelcomeName(profile.displayName ?? null);
+          const ctx = liff.getContext?.();
+          const decoded = liff.getDecodedIDToken?.();
+
+          if (!cancelled) {
+            setWelcomeName(profile.displayName ?? null);
+            setLineUserId(decoded?.sub || ctx?.userId || profile?.userId || null);
+            setLineGroupId(ctx?.groupId || ctx?.roomId || null); // keep last seen group/room for API payload
+          }
         }
       } catch (err) {
         console.error("[LINE] Failed to initialize LIFF", err);
@@ -580,7 +591,11 @@ export default function MentalHealthApp() {
         const res = await fetch("/api/screenings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            lineUserId,
+            lineGroupId,
+          }),
         });
 
         if (!res.ok) {
@@ -601,7 +616,7 @@ export default function MentalHealthApp() {
         setSubmitError(err instanceof Error ? err.message : "Unknown error");
       }
     },
-    []
+    [lineGroupId, lineUserId]
   );
 
   // Logic: Gauge -> 2Q (if high stress) or Stay

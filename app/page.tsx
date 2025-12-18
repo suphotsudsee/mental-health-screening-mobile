@@ -543,8 +543,13 @@ export default function MentalHealthApp() {
           return;
         }
 
-        if (!liff.isInit()) {
+        try {
           await liff.init({ liffId });
+        } catch (err: any) {
+          // Ignore duplicate init attempts; surface other errors.
+          if (!err?.message?.toLowerCase?.().includes("already")) {
+            throw err;
+          }
         }
 
         const inClient = liff.isInClient?.() ?? false;

@@ -20,8 +20,13 @@ export default function LiffInitializer() {
       try {
         const { default: liff } = await import("@line/liff");
 
-        if (!liff.isInit()) {
+        try {
           await liff.init({ liffId });
+        } catch (err: any) {
+          // Ignore duplicate init attempts; surface other errors.
+          if (!err?.message?.toLowerCase?.().includes("already")) {
+            throw err;
+          }
         }
 
         if (!liff.isLoggedIn()) {

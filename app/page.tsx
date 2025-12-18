@@ -531,15 +531,7 @@ export default function MentalHealthApp() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (lineInitRef.current) return;
-
-    const referrer = document.referrer || "";
-    const host = window.location.hostname;
-    const isFromLine = host.includes("miniapp.line.me") || referrer.includes("miniapp.line.me");
-    if (!isFromLine) return;
-
     lineInitRef.current = true;
-    setFromLineMiniApp(true);
-    resetFlow();
 
     let cancelled = false;
     const bootstrap = async () => {
@@ -548,21 +540,30 @@ export default function MentalHealthApp() {
         const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
         if (!liffId) {
           console.warn("[LINE] NEXT_PUBLIC_LIFF_ID is not set; skipping LIFF init");
-        } else {
-          await liff.init({ liffId });
-          if (!liff.isLoggedIn()) {
-            liff.login({ redirectUri: window.location.href });
-            return;
-          }
-          const profile = await liff.getProfile();
-          const ctx = liff.getContext?.();
-          const decoded = liff.getDecodedIDToken?.();
+          return;
+        }
 
-          if (!cancelled) {
-            setWelcomeName(profile.displayName ?? null);
-            setLineUserId(decoded?.sub || ctx?.userId || profile?.userId || null);
-            setLineGroupId(ctx?.groupId || ctx?.roomId || null); // keep last seen group/room for API payload
-          }
+        if (!liff.isInit()) {
+          await liff.init({ liffId });
+        }
+
+        const inClient = liff.isInClient?.() ?? false;
+        setFromLineMiniApp(inClient);
+        resetFlow();
+
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        const profile = await liff.getProfile();
+        const ctx = liff.getContext?.();
+        const decoded = liff.getDecodedIDToken?.();
+
+        if (!cancelled) {
+          setWelcomeName(profile.displayName ?? null);
+          setLineUserId(decoded?.sub || ctx?.userId || profile?.userId || null);
+          setLineGroupId(ctx?.groupId || ctx?.roomId || null); // keep last seen group/room for API payload
         }
       } catch (err) {
         console.error("[LINE] Failed to initialize LIFF", err);

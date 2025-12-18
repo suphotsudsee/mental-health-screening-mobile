@@ -2,30 +2,35 @@
 
 import { useEffect } from "react";
 
-const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-
+/**
+ * Initializes LIFF early in the app lifecycle so that any page can safely
+ * call liff APIs. This also redirects to LINE login when not authenticated.
+ */
 export default function LiffInitializer() {
   useEffect(() => {
+    const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
     if (!liffId) {
-      console.warn("Missing NEXT_PUBLIC_LIFF_ID; skip LIFF init");
+      console.warn("Missing NEXT_PUBLIC_LIFF_ID; skipping LIFF init");
       return;
     }
 
+    let cancelled = false;
+
     const initLiff = async () => {
-      const liff = (window as typeof window & { liff?: any }).liff;
-
-      if (!liff?.init) {
-        console.error("LIFF SDK not loaded on window");
-        return;
-      }
-
       try {
-        await liff.init({ liffId });
+        const { default: liff } = await import("@line/liff");
 
-        if (liff.isLoggedIn()) {
-          console.log("LIFF logged in");
-        } else {
-          liff.login();
+        if (!liff.isInit()) {
+          await liff.init({ liffId });
+        }
+
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        if (!cancelled) {
+          console.log("[LINE] LIFF initialized and logged in");
         }
       } catch (error) {
         console.error("LIFF init failed", error);
@@ -33,6 +38,10 @@ export default function LiffInitializer() {
     };
 
     void initLiff();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return null;

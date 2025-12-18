@@ -33,9 +33,51 @@ export async function POST(req: NextRequest) {
     const bodyText = bodyBuffer.toString("utf-8");
     const signature = req.headers.get("x-line-signature");
 
+    let parsedBody: any;
+    try {
+      parsedBody = JSON.parse(bodyText);
+    } catch (parseErr) {
+      console.warn("[LINE] Failed to parse webhook payload", parseErr);
+      // Persist raw body for troubleshooting malformed requests.
+      try {
+        await prisma.line_events.create({
+          data: {
+            event_type: "invalid_json",
+            user_id: null,
+            reply_token: null,
+            message_type: null,
+            message_text: null,
+            raw_json: { rawBody: bodyText.slice(0, 2000) },
+          },
+        });
+      } catch (dbErr) {
+        console.error("[LINE] Failed to persist malformed webhook payload:", dbErr);
+      }
+      return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 200 });
+    }
+
     const isValid = verifySignature(bodyBuffer, signature);
     if (!isValid) {
-      // Respond 200 so LINE stops retrying, but log the invalid signature.
+      // Still store the payload for diagnostics so we can see what LINE sent.
+      try {
+        await prisma.line_events.create({
+          data: {
+            event_type: "invalid_signature",
+            user_id: null,
+            reply_token: null,
+            message_type: null,
+            message_text: null,
+            raw_json: {
+              hasSignature: Boolean(signature),
+              signature,
+              rawBody: parsedBody,
+            },
+          },
+        });
+      } catch (dbErr) {
+        console.error("[LINE] Failed to persist invalid-signature payload:", dbErr);
+      }
+
       console.warn("[LINE] Invalid signature, ignoring payload");
       return NextResponse.json(
         { success: false, error: "Invalid LINE signature" },
@@ -43,12 +85,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = JSON.parse(bodyText);
-
     console.log("===== LINE Webhook Event =====");
-    console.log(JSON.stringify(body, null, 2));
+    console.log(JSON.stringify(parsedBody, null, 2));
 
-    const events = body.events || [];
+    const events = Array.isArray(parsedBody?.events) ? parsedBody.events : [];
     for (const ev of events) {
       const source = ev.source || {};
       if (source.groupId) {

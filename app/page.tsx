@@ -24,6 +24,8 @@ import {
 
 type StressGaugeProps = {
   onNext: (level: number) => void;
+  welcomeName?: string | null;
+  autoStart?: boolean;
 };
 
 type TwoQPlusProps = {
@@ -60,12 +62,13 @@ type AssessmentPayload = {
 type SubmissionState = "idle" | "saving" | "error" | "success";
 
 // --- 1. COMPONENT: STRESS GAUGE (CANVAS) ---
-const StressGauge = ({ onNext }: StressGaugeProps) => {
+const StressGauge = ({ onNext, welcomeName, autoStart }: StressGaugeProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [level, setLevel] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [angle, setAngle] = useState(-Math.PI); // Start at Left (-PI)
+  const greetingName = welcomeName ? `สวัสดี คุณ ${welcomeName}` : "สวัสดี เพื่อน LINE";
 
   const levels = useMemo(
     () => [
@@ -503,6 +506,10 @@ export default function MentalHealthApp() {
   const [twoQResult, setTwoQResult] = useState<TwoQResult | null>(null);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [welcomeName, setWelcomeName] = useState<string | null>(null);
+  const [fromLineMiniApp, setFromLineMiniApp] = useState(false);
+  const [showLineWelcome, setShowLineWelcome] = useState(false);
+  const lineInitRef = useRef(false);
 
   const goTo2Q = () => setView("2q");
   const goTo9Q = () => setView("9q");
@@ -516,6 +523,53 @@ export default function MentalHealthApp() {
   }, []);
 
   const goHome = () => resetFlow();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (lineInitRef.current) return;
+
+    const referrer = document.referrer || "";
+    const host = window.location.hostname;
+    const isFromLine = host.includes("miniapp.line.me") || referrer.includes("miniapp.line.me");
+    if (!isFromLine) return;
+
+    lineInitRef.current = true;
+    setFromLineMiniApp(true);
+    resetFlow();
+
+    let cancelled = false;
+    const bootstrap = async () => {
+      try {
+        const { default: liff } = await import("@line/liff");
+        const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+        if (!liffId) {
+          console.warn("[LINE] NEXT_PUBLIC_LIFF_ID is not set; skipping LIFF init");
+        } else {
+          await liff.init({ liffId });
+          if (!liff.isLoggedIn()) {
+            liff.login({ redirectUri: window.location.href });
+            return;
+          }
+          const profile = await liff.getProfile();
+          if (!cancelled) setWelcomeName(profile.displayName ?? null);
+        }
+      } catch (err) {
+        console.error("[LINE] Failed to initialize LIFF", err);
+      } finally {
+        if (cancelled) return;
+        setShowLineWelcome(true);
+        setTimeout(() => {
+          if (!cancelled) setShowLineWelcome(false);
+        }, 3200);
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resetFlow]);
 
   const submitAssessment = useCallback(
     async (payload: AssessmentPayload) => {
@@ -612,9 +666,18 @@ export default function MentalHealthApp() {
           </button>
         </div>
 
+        {showLineWelcome && (
+          <div className="absolute top-16 left-0 right-0 flex justify-center px-4 z-30">
+            <div className="bg-blue-600 text-white px-4 py-3 rounded-2xl shadow-lg text-sm font-semibold flex items-center gap-2">
+              <Sun size={18} className="opacity-80" />
+              <span>สวัสดี คุณ {welcomeName ?? "เพื่อน LINE"} • กำลังเริ่มต้นการประเมินให้คุณ</span>
+            </div>
+          </div>
+        )}
+
         {/* Dynamic Content */}
         <div className="flex-1 overflow-hidden relative bg-slate-50">
-          {view === "home" && <StressGauge onNext={handleGaugeNext} />}
+          {view === "home" && <StressGauge onNext={handleGaugeNext} welcomeName={welcomeName} autoStart={fromLineMiniApp} />}
           {view === "2q" && <TwoQPlus onNext={goTo9Q} onHome={goHome} onResult={handleTwoQResult} />}
           {view === "9q" && <NineQ onHome={goHome} onComplete={handleNineQComplete} />}
         </div>

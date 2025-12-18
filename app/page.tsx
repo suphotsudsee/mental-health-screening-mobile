@@ -528,6 +528,32 @@ export default function MentalHealthApp() {
 
   const goHome = () => resetFlow();
 
+  const getLineIdentity = useCallback(async () => {
+    try {
+      const { default: liff } = await import("@line/liff");
+      if (!liff.isLoggedIn()) {
+        return { userId: null, groupId: null, displayName: null };
+      }
+
+      const profile = await liff.getProfile();
+      const ctx = liff.getContext?.();
+      const decoded = liff.getDecodedIDToken?.();
+
+      const userId = decoded?.sub || ctx?.userId || profile?.userId || null;
+      const groupId = ctx?.groupId || ctx?.roomId || null;
+      const displayName = profile.displayName ?? null;
+
+      setLineUserId((prev) => prev ?? userId);
+      setLineGroupId((prev) => prev ?? groupId);
+      setWelcomeName((prev) => prev ?? displayName);
+
+      return { userId, groupId, displayName };
+    } catch (err) {
+      console.error("[LINE] Failed to read identity", err);
+      return { userId: null, groupId: null, displayName: null };
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (lineInitRef.current) return;
@@ -561,14 +587,11 @@ export default function MentalHealthApp() {
           return;
         }
 
-        const profile = await liff.getProfile();
-        const ctx = liff.getContext?.();
-        const decoded = liff.getDecodedIDToken?.();
-
+        const identity = await getLineIdentity();
         if (!cancelled) {
-          setWelcomeName(profile.displayName ?? null);
-          setLineUserId(decoded?.sub || ctx?.userId || profile?.userId || null);
-          setLineGroupId(ctx?.groupId || ctx?.roomId || null); // keep last seen group/room for API payload
+          setWelcomeName(identity.displayName);
+          setLineUserId(identity.userId);
+          setLineGroupId(identity.groupId); // keep last seen group/room for API payload
         }
       } catch (err) {
         console.error("[LINE] Failed to initialize LIFF", err);
@@ -586,7 +609,7 @@ export default function MentalHealthApp() {
     return () => {
       cancelled = true;
     };
-  }, [resetFlow]);
+  }, [getLineIdentity, resetFlow]);
 
   const submitAssessment = useCallback(
     async (payload: AssessmentPayload) => {
@@ -594,13 +617,18 @@ export default function MentalHealthApp() {
       setSubmitError(null);
 
       try {
+        // Refresh identity right before submit to ensure userId is captured after login redirect.
+        const identity = await getLineIdentity();
+        const finalLineUserId = identity.userId ?? lineUserId;
+        const finalLineGroupId = identity.groupId ?? lineGroupId;
+
         const res = await fetch("/api/screenings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...payload,
-            lineUserId,
-            lineGroupId,
+            lineUserId: finalLineUserId,
+            lineGroupId: finalLineGroupId,
           }),
         });
 
@@ -622,7 +650,7 @@ export default function MentalHealthApp() {
         setSubmitError(err instanceof Error ? err.message : "Unknown error");
       }
     },
-    [lineGroupId, lineUserId]
+    [getLineIdentity, lineGroupId, lineUserId]
   );
 
   // Logic: Gauge -> 2Q (if high stress) or Stay

@@ -20,3 +20,19 @@ model line_events {
   @@index([user_id])
   @@index([created_at])
 }
+
+model screenings {
+  id             BigInt   @id @default(autoincrement())
+  stress_level   Int?
+  two_q1         Boolean?
+  two_q2         Boolean?
+  two_q_risk     Boolean?
+  nine_q_score   Int?
+  nine_q_level   String?  @db.VarChar(64)
+  suicide_risk   Boolean?
+  line_user_id   String?  @db.VarChar(64)
+  line_group_id  String?  @db.VarChar(64)
+  created_at     DateTime @default(now())
+
+  @@index([created_at])
+}

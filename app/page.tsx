@@ -29,11 +29,35 @@ type StressGaugeProps = {
 type TwoQPlusProps = {
   onNext: () => void;
   onHome: () => void;
+  onResult: (result: TwoQResult) => void;
 };
 
 type NineQProps = {
   onHome: () => void;
+  onComplete: (result: NineQResult) => void;
 };
+
+type TwoQResult = {
+  q1: boolean;
+  q2: boolean;
+  risk: boolean;
+};
+
+type NineQResult = {
+  score: number;
+  severity: string;
+  hasSuicideRisk: boolean;
+};
+
+type AssessmentPayload = {
+  stressLevel: number | null;
+  twoQ: TwoQResult | null;
+  nineQScore: number | null;
+  nineQSeverity: string | null;
+  hasSuicideRisk: boolean;
+};
+
+type SubmissionState = "idle" | "saving" | "error" | "success";
 
 // --- 1. COMPONENT: STRESS GAUGE (CANVAS) ---
 const StressGauge = ({ onNext }: StressGaugeProps) => {
@@ -249,9 +273,10 @@ const StressGauge = ({ onNext }: StressGaugeProps) => {
 };
 
 // --- 2. COMPONENT: 2Q PLUS ---
-const TwoQPlus = ({ onNext, onHome }: TwoQPlusProps) => {
+const TwoQPlus = ({ onNext, onHome, onResult }: TwoQPlusProps) => {
   const [step, setStep] = useState(1);
-  const [answers, setAnswers] = useState({ q1: null, q2: null });
+  const [answers, setAnswers] = useState<{ q1: boolean | null; q2: boolean | null }>({ q1: null, q2: null });
+  const hasReported = useRef(false);
 
   const questions = [
     {
@@ -281,7 +306,18 @@ const TwoQPlus = ({ onNext, onHome }: TwoQPlusProps) => {
     }, 200);
   };
 
-  const isRisk = answers.q1 || answers.q2;
+  const isRisk = Boolean(answers.q1 || answers.q2);
+
+  useEffect(() => {
+    if (step === 3 && !hasReported.current) {
+      hasReported.current = true;
+      onResult({
+        q1: Boolean(answers.q1),
+        q2: Boolean(answers.q2),
+        risk: Boolean(answers.q1 || answers.q2),
+      });
+    }
+  }, [step, answers, onResult]);
 
   // Render Result Phase
   if (step === 3) {
@@ -356,10 +392,11 @@ const TwoQPlus = ({ onNext, onHome }: TwoQPlusProps) => {
 };
 
 // --- 3. COMPONENT: 9Q ---
-const NineQ = ({ onHome }: NineQProps) => {
+const NineQ = ({ onHome, onComplete }: NineQProps) => {
   const [step, setStep] = useState(1);
   const [score, setScore] = useState(0);
   const [hasSuicideRisk, setHasSuicideRisk] = useState(false);
+  const hasReported = useRef(false);
 
   const questions = [
     { text: "ทำกิจกรรมต่างๆ แล้วรู้สึกไม่สนใจหรือไม่เพลิดเพลิน", icon: <Coffee className="text-slate-500" /> },
@@ -382,11 +419,23 @@ const NineQ = ({ onHome }: NineQProps) => {
   };
 
   const getResult = () => {
-    if (score < 7) return { level: "อาการซึมเศร้าต่ำ", color: "text-green-600", bg: "bg-green-50" };
-    if (score < 13) return { level: "อาการซึมเศร้าระดับเล็กน้อย", color: "text-yellow-600", bg: "bg-yellow-50" };
-    if (score < 19) return { level: "อาการซึมเศร้าปานกลาง", color: "text-orange-600", bg: "bg-orange-50" };
-    return { level: "อาการซึมเศร้ารุนแรง", color: "text-red-600", bg: "bg-red-50" };
+    if (score < 7) return { level: "อาการซึมเศร้าต่ำ", color: "text-green-600", bg: "bg-green-50", severity: "minimal" };
+    if (score < 13) return { level: "อาการซึมเศร้าระดับเล็กน้อย", color: "text-yellow-600", bg: "bg-yellow-50", severity: "mild" };
+    if (score < 19) return { level: "อาการซึมเศร้าปานกลาง", color: "text-orange-600", bg: "bg-orange-50", severity: "moderate" };
+    return { level: "อาการซึมเศร้ารุนแรง", color: "text-red-600", bg: "bg-red-50", severity: "severe" };
   };
+
+  useEffect(() => {
+    if (step === 10 && !hasReported.current) {
+      hasReported.current = true;
+      const res = getResult();
+      onComplete({
+        score,
+        hasSuicideRisk,
+        severity: res.severity,
+      });
+    }
+  }, [step, score, hasSuicideRisk, onComplete]);
 
   if (step === 10) {
     const res = getResult();
@@ -450,19 +499,95 @@ const NineQ = ({ onHome }: NineQProps) => {
 // --- MAIN APP ORCHESTRATOR ---
 export default function MentalHealthApp() {
   const [view, setView] = useState("home"); // home (gauge), 2q, 9q
+  const [stressLevel, setStressLevel] = useState<number | null>(null);
+  const [twoQResult, setTwoQResult] = useState<TwoQResult | null>(null);
+  const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const goHome = () => setView("home");
   const goTo2Q = () => setView("2q");
   const goTo9Q = () => setView("9q");
 
+  const resetFlow = useCallback(() => {
+    setView("home");
+    setStressLevel(null);
+    setTwoQResult(null);
+    setSubmissionState("idle");
+    setSubmitError(null);
+  }, []);
+
+  const goHome = () => resetFlow();
+
+  const submitAssessment = useCallback(
+    async (payload: AssessmentPayload) => {
+      setSubmissionState("saving");
+      setSubmitError(null);
+
+      try {
+        const res = await fetch("/api/screenings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          let message = `Request failed with status ${res.status}`;
+          try {
+            const data = await res.json();
+            if (data?.error) message = data.error;
+          } catch {
+            // ignore parsing errors
+          }
+          throw new Error(message);
+        }
+
+        setSubmissionState("success");
+      } catch (err) {
+        console.error("Failed to submit assessment", err);
+        setSubmissionState("error");
+        setSubmitError(err instanceof Error ? err.message : "Unknown error");
+      }
+    },
+    []
+  );
+
   // Logic: Gauge -> 2Q (if high stress) or Stay
   const handleGaugeNext = (level: number) => {
-    if (level >= 3) {
-      goTo2Q();
-    } else {
-      goTo2Q();
-    }
+    setStressLevel(level);
+    setSubmissionState("idle");
+    setSubmitError(null);
+    setTwoQResult(null);
+    goTo2Q();
   };
+
+  const handleTwoQResult = useCallback(
+    (result: TwoQResult) => {
+      setTwoQResult(result);
+      if (!result.risk) {
+        submitAssessment({
+          stressLevel,
+          twoQ: result,
+          nineQScore: null,
+          nineQSeverity: null,
+          hasSuicideRisk: false,
+        });
+      }
+    },
+    [stressLevel, submitAssessment]
+  );
+
+  const handleNineQComplete = useCallback(
+    (result: NineQResult) => {
+      const twoQPayload = twoQResult ?? { q1: false, q2: false, risk: false };
+      submitAssessment({
+        stressLevel,
+        twoQ: twoQPayload,
+        nineQScore: result.score,
+        nineQSeverity: result.severity,
+        hasSuicideRisk: result.hasSuicideRisk,
+      });
+    },
+    [stressLevel, twoQResult, submitAssessment]
+  );
 
   return (
     <div className="h-[100dvh] bg-slate-100 flex items-center justify-center font-sans text-slate-800 p-0 md:p-4">
@@ -490,9 +615,27 @@ export default function MentalHealthApp() {
         {/* Dynamic Content */}
         <div className="flex-1 overflow-hidden relative bg-slate-50">
           {view === "home" && <StressGauge onNext={handleGaugeNext} />}
-          {view === "2q" && <TwoQPlus onNext={goTo9Q} onHome={goHome} />}
-          {view === "9q" && <NineQ onHome={goHome} />}
+          {view === "2q" && <TwoQPlus onNext={goTo9Q} onHome={goHome} onResult={handleTwoQResult} />}
+          {view === "9q" && <NineQ onHome={goHome} onComplete={handleNineQComplete} />}
         </div>
+
+        {submissionState !== "idle" && (
+          <div className="absolute left-0 right-0 bottom-3 flex justify-center px-4">
+            <div
+              className={`px-3 py-2 text-xs rounded-lg shadow ${
+                submissionState === "saving"
+                  ? "bg-blue-50 text-blue-700"
+                  : submissionState === "success"
+                  ? "bg-green-50 text-green-700"
+                  : "bg-red-50 text-red-700"
+              }`}
+            >
+              {submissionState === "saving" && "Saving assessment..."}
+              {submissionState === "success" && "Saved to database and sent to LINE."}
+              {submissionState === "error" && `Could not save: ${submitError ?? "unknown error"}`}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

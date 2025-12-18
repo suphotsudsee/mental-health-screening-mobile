@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 const CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET || "";
 
@@ -56,6 +57,22 @@ export async function POST(req: NextRequest) {
         console.log("[LINE] roomId:", source.roomId);
       } else if (source.userId) {
         console.log("[LINE] userId (1:1 chat):", source.userId);
+      }
+
+      // Persist the event for diagnostics and target fallback resolution.
+      try {
+        await prisma.line_events.create({
+          data: {
+            event_type: ev.type ?? "unknown",
+            user_id: source.userId ?? null,
+            reply_token: ev.replyToken ?? null,
+            message_type: ev.message?.type ?? null,
+            message_text: ev.message?.text ?? null,
+            raw_json: ev,
+          },
+        });
+      } catch (dbErr) {
+        console.error("[LINE] Failed to persist webhook event:", dbErr);
       }
     }
 

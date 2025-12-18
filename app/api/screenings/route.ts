@@ -146,6 +146,31 @@ async function pushLineToTargets(text: string, userId?: string | null, groupId?:
   };
 }
 
+async function resolveGroupTarget(fallbackFromBody?: string | null) {
+  if (fallbackFromBody) return fallbackFromBody;
+  if (DEFAULT_LINE_TARGET) return DEFAULT_LINE_TARGET;
+
+  // Try to infer the last seen group/room from recent LINE webhook events.
+  try {
+    const events = await prisma.line_events.findMany({
+      orderBy: { created_at: "desc" },
+      take: 20,
+    });
+
+    for (const ev of events) {
+      const raw = ev.raw_json as { source?: { groupId?: string; roomId?: string } } | null;
+      const groupId = raw?.source?.groupId || raw?.source?.roomId;
+      if (typeof groupId === "string" && groupId.trim().length > 0) {
+        return groupId;
+      }
+    }
+  } catch (err) {
+    console.error("[screenings] Failed to resolve group target from webhook history", err);
+  }
+
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as ScreeningPayload;
@@ -158,7 +183,7 @@ export async function POST(req: NextRequest) {
     const twoQ1 = toBoolean(twoQ?.q1);
     const twoQ2 = toBoolean(twoQ?.q2);
     const twoQRisk = twoQ1 || twoQ2;
-    const resolvedGroupId = body.lineGroupId || DEFAULT_LINE_TARGET || null;
+    const resolvedGroupId = await resolveGroupTarget(body.lineGroupId ?? null);
 
     if (stressLevel === null || !twoQ) {
       return NextResponse.json({ error: "Missing required screening data" }, { status: 400 });
@@ -191,6 +216,9 @@ export async function POST(req: NextRequest) {
     });
 
     const lineResults = await pushLineToTargets(summary, body.lineUserId, resolvedGroupId);
+    if (!lineResults.anySuccess && !lineResults.allSkipped) {
+      console.error("[screenings] Failed to push LINE summary", lineResults);
+    }
 
     const responseData = {
       ...record,

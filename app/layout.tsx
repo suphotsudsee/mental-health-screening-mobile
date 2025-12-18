@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import LiffInitializer from "@/components/LiffInitializer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +28,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+         <main className="min-h-dvh w-full bg-white">
         {children}
+        </main>
+        <LiffInitializer />
       </body>
     </html>
   );
